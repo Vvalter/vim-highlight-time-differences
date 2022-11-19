@@ -5,15 +5,23 @@ local M = {}
 -- %l is the line number
 local vim_error_format = "%m:%t:%f:%l"
 local error_template = "'%s ms:%s:%s:%d'"
+local namespace_id = nil
 
 local function add_quickfix_entry(quickfixes, type, file_name, line, diff)
     local quickfix = { diff, type, file_name, line }
     table.insert(quickfixes, quickfix)
 end
 
-function M.HighlightTimeDifferences()
+function M.HighlightTimeDifferencesClear(start_line, end_line)
+    if namespace_id ~= nil then
+        local buf = 0
+        vim.api.nvim_buf_clear_namespace(buf, namespace_id, start_line - 1, end_line + 1)
+    end
+end
+
+function M.HighlightTimeDifferences(start_line, end_line)
     local buf = 0
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
     local time_pattern = "^.*(%d%d):(%d%d):(%d%d).(%d%d%d)"
     local file_name = vim.api.nvim_buf_get_name(0) or ""
     local quickfixes = {}
@@ -27,10 +35,11 @@ function M.HighlightTimeDifferences()
     end
 
     vim.api.nvim_buf_clear_namespace(buf, -1, 0, -1)
-    local nsid = vim.api.nvim_create_namespace("highlight-time-differences")
+    namespace_id = vim.api.nvim_create_namespace("highlight-time-differences")
     local last_time = nil
-    for line_nr in pairs(lines) do
-        local time_start_pos, time_end_pos, current_line_time = extract_time_from_line(lines[line_nr])
+    for relative_line_nr in pairs(lines) do
+        local line_nr = start_line - 1 + relative_line_nr
+        local time_start_pos, time_end_pos, current_line_time = extract_time_from_line(lines[relative_line_nr])
 
         if current_line_time == nil then
             goto continue
@@ -60,7 +69,8 @@ function M.HighlightTimeDifferences()
         end
 
         if highlight_group ~= nil then
-            vim.api.nvim_buf_add_highlight(buf, nsid, highlight_group, line_nr - 1, time_start_pos - 1, time_end_pos)
+            vim.api.nvim_buf_add_highlight(buf, namespace_id, highlight_group, line_nr - 1, time_start_pos - 1,
+                time_end_pos)
         end
 
         if quickfix_type ~= nil then

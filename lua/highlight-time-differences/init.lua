@@ -1,9 +1,22 @@
 local M = {}
 
+-- %t is a single character that specifies the type. One of "e" (error), "w" (warning), "i" (info), "n" (note)
+-- %f is the file name
+-- %l is the line number
+local vim_error_format = "%m:%t:%f:%l"
+local error_template = "'%s ms:%s:%s:%d'"
+
+local function add_quickfix_entry(quickfixes, type, file_name, line, diff)
+    local quickfix = { diff, type, file_name, line }
+    table.insert(quickfixes, quickfix)
+end
+
 function M.HighlightTimeDifferences()
     local buf = 0
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local time_pattern = "^.*(%d%d):(%d%d):(%d%d).(%d%d%d)"
+    local file_name = vim.api.nvim_buf_get_name(0) or ""
+    local quickfixes = {}
 
     local function extract_time_from_line(line)
         local start_pos, end_pos, h, m, s, ms = line:find(time_pattern)
@@ -29,14 +42,19 @@ function M.HighlightTimeDifferences()
         end
 
         local highlight_group = nil
+        local quickfix_type = nil
         if diff >= 1000 * 60 then -- one minute
             highlight_group = "DiagnosticError"
+            quickfix_type = "e"
         elseif diff >= 1000 * 10 then -- 10 seconds
             highlight_group = "DiagnosticWarn"
+            quickfix_type = "w"
         elseif diff >= 1000 then -- 1 second
             highlight_group = "DiagnosticInfo"
+            quickfix_type = "i"
         elseif diff >= 100 then -- 100 ms
             highlight_group = "DiagnosticHint"
+            quickfix_type = "n"
         elseif diff < 0 then
             highlight_group = "Error"
         end
@@ -45,8 +63,23 @@ function M.HighlightTimeDifferences()
             vim.api.nvim_buf_add_highlight(buf, nsid, highlight_group, line_nr - 1, time_start_pos - 1, time_end_pos)
         end
 
+        if quickfix_type ~= nil then
+            add_quickfix_entry(quickfixes, quickfix_type, file_name, line_nr, diff)
+        end
+
         last_time = current_line_time
         ::continue::
+    end
+
+    table.sort(quickfixes, function(a, b) return a[1] > b[1] end)
+
+    for i, v in ipairs(quickfixes) do
+        quickfixes[i] = string.format(error_template, v[1], v[2], v[3], v[4])
+    end
+
+    if #quickfixes > 0 then
+        vim.api.nvim_command(string.format("set errorformat=%s", vim_error_format))
+        vim.api.nvim_command(string.format("cexpr [%s]", table.concat(quickfixes, ",")))
     end
 end
 

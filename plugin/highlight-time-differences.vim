@@ -8,7 +8,8 @@ let g:loaded_highlight_time_differences = 1
 let s:save_cpo = &cpo
 set cpo&vim
 
-command! -nargs=* -range=% HighlightTimeDifferences lua require("highlight-time-differences").HighlightTimeDifferences(<line1>, <line2>)
+command! -nargs=* -range=% HighlightTimeDifferences
+    \ lua require("highlight-time-differences").HighlightTimeDifferences(<line1>, <line2>, {<f-args>})
 command! -range=% HighlightTimeDifferencesClear lua require("highlight-time-differences").HighlightTimeDifferencesClear(<line1>, <line2>)
 
 let &cpo = s:save_cpo

@@ -5,6 +5,9 @@ local M = {}
 -- %l is the line number
 local vim_error_format = "%m:%t:%f:%l"
 local error_template = "'%s ms:%s:%s:%d'"
+local highlight_groups = { "DiagnosticError", "DiagnosticWarn", "DiagnosticInfo", "DiagnosticHint" }
+local quickfix_types = { "e", "w", "i", "n" }
+
 local namespace_id = nil
 
 local function add_quickfix_entry(quickfixes, type, file_name, line, diff)
@@ -19,7 +22,22 @@ function M.HighlightTimeDifferencesClear(start_line, end_line)
     end
 end
 
-function M.HighlightTimeDifferences(start_line, end_line)
+function M.HighlightTimeDifferences(start_line, end_line, thresholds)
+    if #thresholds > 4 then
+        error("Only up to 4 threshold numbers are supported")
+    end
+    for i, t in ipairs(thresholds) do
+        thresholds[i] = tonumber(t)
+        if thresholds[i] == nil then
+            error("Threshold must be a number!")
+        end
+    end
+
+    if #thresholds == 0 then
+        thresholds = { 1000 * 60 } -- one minute
+    end
+
+
     local buf = 0
     local lines = vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false)
     local time_pattern = "^.*(%d%d):(%d%d):(%d%d).(%d%d%d)"
@@ -52,20 +70,16 @@ function M.HighlightTimeDifferences(start_line, end_line)
 
         local highlight_group = nil
         local quickfix_type = nil
-        if diff >= 1000 * 60 then -- one minute
-            highlight_group = "DiagnosticError"
-            quickfix_type = "e"
-        elseif diff >= 1000 * 10 then -- 10 seconds
-            highlight_group = "DiagnosticWarn"
-            quickfix_type = "w"
-        elseif diff >= 1000 then -- 1 second
-            highlight_group = "DiagnosticInfo"
-            quickfix_type = "i"
-        elseif diff >= 100 then -- 100 ms
-            highlight_group = "DiagnosticHint"
-            quickfix_type = "n"
-        elseif diff < 0 then
+
+        if diff < 0 then
             highlight_group = "Error"
+        else
+            for i, t in ipairs(thresholds) do
+                if highlight_group == nil and diff >= t then
+                    highlight_group = highlight_groups[i]
+                    quickfix_type = quickfix_types[i]
+                end
+            end
         end
 
         if highlight_group ~= nil then
